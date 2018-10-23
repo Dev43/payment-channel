@@ -1,0 +1,3 @@
+[submodule "vendor/ethinitium"]
+	path = vendor/ethinitium
+	url = git@github.com:Dev43/ethinitium.git
