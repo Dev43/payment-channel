@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/Dev43/payment-channel/channel"
@@ -17,10 +16,10 @@ var infoCmd = &cobra.Command{
 	Short: "Print the version number of Hugo",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {
-		ch, err := channel.LoadChannel()
+		c, err := channel.NewChannel()
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(ch.Info())
+		c.Info()
 	},
 }

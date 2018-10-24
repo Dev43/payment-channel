@@ -3,22 +3,24 @@ package channel
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"math/big"
 	"os"
 
+	"github.com/Dev43/payment-channel/util"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
-	"github.com/Dev43/payment-channel/cryptoutil"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type JsonStorage struct {
-	PaymentProofs []PaymentProof  `json:"payment_proof"`
-	TotalBalance  string          `json:"total_balance"`
-	LatestBalance string          `json:"latest_balance"`
-	Accounts      map[string]Keys `json:"accounts"`
+	PaymentProofs   []PaymentProof  `json:"payment_proof"`
+	TotalBalance    string          `json:"total_balance"`
+	LatestBalance   string          `json:"latest_balance"`
+	Accounts        map[string]Keys `json:"accounts"`
+	ContractAddress string          `json:"contract_address"`
 }
 
 type Keys struct {
@@ -26,21 +28,40 @@ type Keys struct {
 	PrivateKey string `json:"private_key"`
 }
 
-func CreateStorage() error {
-	fmt.Println(exists())
-	if err := exists(); err != nil {
-		return err
+func CreateStorage(safe bool) error {
+	if ok := exists(); !ok && safe {
+		return errors.New("Storage already exists")
 	}
-	aliceKey, alicePriv := cryptoutil.GenerateKeyPair()
-	bobKey, bobPriv := cryptoutil.GenerateKeyPair()
+
+	alice := common.HexToAddress("0x29535aB060046D7020f3B3464527eE24b802c871")
+	bob := common.HexToAddress("0x1b3960dB2F02C23Ed3b816750Dc4BD688B325792")
+	alicePriv, err := crypto.HexToECDSA("d1ea7553648eea5e58f22abf8b03055415d121cdb5c6e7c099e0ff232214c5f6")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bobPriv, err := crypto.HexToECDSA("86feb87fe87829d0519b569e6ef503099d55ee4fb2c5e6a753975f4cef590461")
+	if err != nil {
+		log.Fatal(err)
+	}
 	aliceKeys := Keys{
-		Address:    aliceKey.String(),
+		Address:    alice.String(),
 		PrivateKey: hexutil.Encode(crypto.FromECDSA(alicePriv)),
 	}
 	bobKeys := Keys{
-		Address:    bobKey.String(),
+		Address:    bob.String(),
 		PrivateKey: hexutil.Encode(crypto.FromECDSA(bobPriv)),
 	}
+	// aliceKey, alicePriv := cryptoutil.GenerateKeyPair()
+	// bobKey, bobPriv := cryptoutil.GenerateKeyPair()
+	// aliceKeys := Keys{
+	// 	Address:    aliceKey.String(),
+	// 	PrivateKey: hexutil.Encode(crypto.FromECDSA(alicePriv)),
+	// }
+	// bobKeys := Keys{
+	// 	Address:    bobKey.String(),
+	// 	PrivateKey: hexutil.Encode(crypto.FromECDSA(bobPriv)),
+	// }
 	j := JsonStorage{
 		TotalBalance:  "0",
 		LatestBalance: "0",
@@ -48,6 +69,7 @@ func CreateStorage() error {
 			"alice": aliceKeys,
 			"bob":   bobKeys,
 		},
+		ContractAddress: util.ZeroAddress,
 	}
 	b, err := json.Marshal(j)
 	if err != nil {
@@ -59,9 +81,9 @@ func CreateStorage() error {
 
 func LoadStorage() (*JsonStorage, error) {
 	s := JsonStorage{}
-	err := exists()
-	if err != nil {
-		return &JsonStorage{}, err
+	ok := exists()
+	if !ok {
+		return &JsonStorage{}, errors.New("Storage does not exist, run init")
 	}
 	data, err := ioutil.ReadFile("storage.json")
 	if err != nil {
@@ -72,14 +94,14 @@ func LoadStorage() (*JsonStorage, error) {
 }
 
 // see if it exists
-func exists() error {
+func exists() bool {
 	f, err := os.Open("storage.json")
-	if err == nil {
-		return errors.New("Storage file already exists")
+	if err != nil {
+		return false
 		// TO DO -- add a way to remove with current file with a flag
 	}
 	defer f.Close()
-	return nil
+	return true
 }
 
 func (j *JsonStorage) Save() error {
