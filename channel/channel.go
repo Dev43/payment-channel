@@ -148,8 +148,8 @@ func (c *Channel) Open(openingValue *big.Int, counterParty common.Address) error
 
 func (c *Channel) Close() error {
 	var sigs [2][]byte
-	var r, s, rb, sb [32]byte
-	var v, vb uint8
+	var r, s [32]byte
+	var v uint8
 	if len(c.paymentProofs) == 0 {
 		return errors.New("No proofs")
 	}
@@ -163,7 +163,6 @@ func (c *Channel) Close() error {
 	}
 
 	r, s, v = cryptoutil.ExtractRSVFromSignature(sigs[0])
-	rb, sb, vb = cryptoutil.ExtractRSVFromSignature(sigs[1])
 
 	value, ok := new(big.Int).SetString(latestProof.Amount, 10)
 	if !ok {
@@ -180,7 +179,7 @@ func (c *Channel) Close() error {
 		return err
 	}
 
-	tx, err := paymentChannel.CloseChannel(auth, common.HexToHash(latestProof.Proof), [2]uint8{v, vb}, [2][32]byte{r, rb}, [2][32]byte{s, sb}, value, nonce)
+	tx, err := paymentChannel.CloseChannel(auth, common.HexToHash(latestProof.Proof), v, r, s, value, nonce)
 	if err != nil {
 		return err
 	}
@@ -219,8 +218,8 @@ func (c *Channel) Finalize() error {
 
 func (c *Channel) Challenge() error {
 	var sigs [2][]byte
-	var r, s, rb, sb [32]byte
-	var v, vb uint8
+	var r, s [32]byte
+	var v uint8
 	if len(c.paymentProofs) == 0 {
 		return errors.New("No proofs")
 	}
@@ -234,7 +233,6 @@ func (c *Channel) Challenge() error {
 	}
 
 	r, s, v = cryptoutil.ExtractRSVFromSignature(sigs[0])
-	rb, sb, vb = cryptoutil.ExtractRSVFromSignature(sigs[1])
 
 	value, ok := new(big.Int).SetString(latestProof.Amount, 10)
 	if !ok {
@@ -251,7 +249,7 @@ func (c *Channel) Challenge() error {
 		return err
 	}
 
-	tx, err := paymentChannel.Challenge(auth, common.HexToHash(latestProof.Proof), [2]uint8{v, vb}, [2][32]byte{r, rb}, [2][32]byte{s, sb}, value, nonce)
+	tx, err := paymentChannel.Challenge(auth, common.HexToHash(latestProof.Proof), v, r, s, value, nonce)
 	if err != nil {
 		return err
 	}
@@ -280,18 +278,14 @@ func CreateNewMessage(address common.Address, cAddress common.Address, value *bi
 
 // TODO split this function so one can decide who is creating the signature
 func (c *Channel) CreateSignatures(value *big.Int, nonce *big.Int) error {
-	bob := c.accounts["bob"].address
 	alice := c.accounts["alice"].address
 	pr, sig, err := CreateNewMessage(alice, c.address, value, nonce, c.privKeyA)
 	if err != nil {
 		return err
 	}
-	pr, sigb, err := CreateNewMessage(bob, c.address, value, nonce, c.privKeyB)
-	if err != nil {
-		return err
-	}
+
 	paymentProof := PaymentProof{
-		Signatures: []Signature{{Sig: hexutil.Encode(sig), From: "alice"}, {Sig: hexutil.Encode(sigb), From: "bob"}},
+		Signatures: []Signature{{Sig: hexutil.Encode(sig), From: "alice"}},
 		Amount:     value.String(),
 		Date:       time.Now().String(),
 		Nonce:      nonce.String(),
@@ -331,19 +325,11 @@ func (c *Channel) VerifyMessages() error {
 		}
 		proof := common.HexToHash(latestProof.Proof)
 		// TODO change this
-		if sig.From == "alice" {
-			err = validateMessage(paymentChannel, sigb, proof, c.accounts["alice"].address, v, n)
-			if err != nil {
-				return err
-			}
-
-		} else {
-			err = validateMessage(paymentChannel, sigb, proof, c.accounts["bob"].address, v, n)
-			if err != nil {
-				return err
-			}
-
+		err = validateMessage(paymentChannel, sigb, proof, v, n)
+		if err != nil {
+			return err
 		}
+
 	}
 	return nil
 
@@ -376,11 +362,11 @@ func (c *Channel) Balance() {
 	`, util.ToDecimal(new(big.Int).Sub(c.totalBalance, c.latestBalance)), util.ToDecimal(c.latestBalance)))
 }
 
-func validateMessage(paymentChannel *bindings.SinglePaymentChannel, signature []byte, proof common.Hash, originator common.Address, value *big.Int, nonce *big.Int) error {
+func validateMessage(paymentChannel *bindings.SinglePaymentChannel, signature []byte, proof common.Hash, value *big.Int, nonce *big.Int) error {
 	// Extract the r,s,v of the signature
 	r, s, v := cryptoutil.ExtractRSVFromSignature(signature)
 	// Let's verify our signature is correct
-	ok, err := paymentChannel.SinglePaymentChannelCaller.VerifyValidityOfMessage(nil, proof, v, r, s, value, nonce, originator)
+	ok, err := paymentChannel.SinglePaymentChannelCaller.VerifyValidityOfMessage(nil, proof, v, r, s, value, nonce)
 	if err != nil {
 		return err
 	}
