@@ -9,8 +9,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -21,6 +19,18 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
+
+type Channel struct {
+	store         Storage
+	client        *ethclient.Client
+	latestBalance *big.Int
+	totalBalance  *big.Int
+	privKeyA      *ecdsa.PrivateKey
+	privKeyB      *ecdsa.PrivateKey
+	address       common.Address
+	paymentProofs []PaymentProof
+	accounts      map[string]Account
+}
 
 type Signature struct {
 	Sig  string `json:"sig"`
@@ -35,27 +45,20 @@ type PaymentProof struct {
 	Proof      string      `json:"proof"`
 }
 
-type Channel struct {
-	store         *JsonStorage
-	client        *ethclient.Client
-	latestBalance *big.Int
-	totalBalance  *big.Int
-	privKeyA      *ecdsa.PrivateKey
-	privKeyB      *ecdsa.PrivateKey
-	address       common.Address
-	paymentProofs []PaymentProof
+type Account struct {
+	address common.Address
+	privKey *ecdsa.PrivateKey
+}
+
+type Storage interface {
+	Create() (*Channel, error)
+	Load() (*Channel, error)
+	Save(*Channel) error
 }
 
 func InitStorage() error {
-	err := CreateStorage(true)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func ResetStorage() error {
-	err := CreateStorage(false)
+	s := NewStorage()
+	_, err := s.Create()
 	if err != nil {
 		return err
 	}
@@ -63,55 +66,18 @@ func ResetStorage() error {
 }
 
 func NewChannel() (*Channel, error) {
-	j, err := LoadStorage()
+	s := NewStorage()
+	// TODO add diff url
+	cli, err := connect()
 	if err != nil {
 		return &Channel{}, err
 	}
-	cli, err := Connect(common.HexToAddress(j.Accounts["alice"].Address), common.HexToAddress(j.Accounts["bob"].Address), false)
+	c, err := s.Load()
 	if err != nil {
 		return &Channel{}, err
 	}
-	tb, ok := new(big.Int).SetString(j.TotalBalance, 10)
-	if !ok {
-		return &Channel{}, errors.New("Could not set big.Int")
-	}
-	lb, ok := new(big.Int).SetString(j.LatestBalance, 10)
-	if !ok {
-		return &Channel{}, errors.New("Could not set big.Int")
-	}
-	// Default to alice's private key for now
-	priv, err := hexutil.Decode(j.Accounts["alice"].PrivateKey)
-	if err != nil {
-		return &Channel{}, err
-	}
-	privEcdsa, err := crypto.ToECDSA(priv)
-	if err != nil {
-		return &Channel{}, err
-	}
-	// Default to bobs private key for now
-	privB, err := hexutil.Decode(j.Accounts["bob"].PrivateKey)
-	if err != nil {
-		return &Channel{}, err
-	}
-	privEcdsaB, err := crypto.ToECDSA(privB)
-	if err != nil {
-		return &Channel{}, err
-	}
-	cAddr := common.HexToAddress(util.ZeroAddress)
-	if j.ContractAddress != util.ZeroAddress {
-		cAddr = common.HexToAddress(j.ContractAddress)
-	}
-	c := Channel{
-		store:         j,
-		client:        cli,
-		totalBalance:  tb,
-		latestBalance: lb,
-		privKeyA:      privEcdsa,
-		privKeyB:      privEcdsaB,
-		address:       cAddr,
-		paymentProofs: j.PaymentProofs,
-	}
-	return &c, nil
+	c.client = cli
+	return c, nil
 }
 
 func (c *Channel) ValidateNonce(nonce *big.Int) error {
@@ -138,7 +104,7 @@ func (c *Channel) Deploy() (common.Address, error) {
 		return common.Address{}, err
 	}
 	c.address = contractAddress
-	err = c.Save()
+	err = c.store.Save(c)
 	if err != nil {
 		return common.Address{}, err
 	}
@@ -149,7 +115,7 @@ func (c *Channel) Open(openingValue *big.Int, counterParty common.Address) error
 	// For now alice's priv key
 	cp := counterParty
 	if cp == common.HexToAddress(util.ZeroAddress) {
-		cp = common.HexToAddress(c.store.Accounts["bob"].Address)
+		cp = c.accounts["bob"].address
 	}
 	if c.address.String() == util.ZeroAddress {
 		return errors.New("You need to deploy a contract first")
@@ -176,7 +142,7 @@ func (c *Channel) Open(openingValue *big.Int, counterParty common.Address) error
 		return fmt.Errorf("Problem at the EVM execution level for transaction %s ", receipt.TxHash.String())
 	}
 	c.totalBalance = openingValue
-	c.Save()
+	c.store.Save(c)
 	return nil
 }
 
@@ -299,36 +265,6 @@ func (c *Channel) Challenge() error {
 	return nil
 }
 
-func Connect(alice common.Address, bob common.Address, isSim bool) (*ethclient.Client, error) {
-	client, err := ethclient.Dial("http://127.0.0.1:7545")
-	if err != nil {
-		log.Fatal(err)
-	}
-	return client, err
-}
-
-func (c *Channel) Save() error {
-	c.store.TotalBalance = c.totalBalance.String()
-	c.store.LatestBalance = c.latestBalance.String()
-	c.store.ContractAddress = c.address.String()
-	return c.store.Save()
-}
-
-func formatData(address common.Address, contractAddress common.Address, value *big.Int, nonce *big.Int) ([]byte, error) {
-
-	paddedAddress := (contractAddress.Bytes())
-	// Let's pad the values so they are uint256
-	paddedValue := common.LeftPadBytes(value.Bytes(), 32)
-	paddedNonce := common.LeftPadBytes(nonce.Bytes(), 32)
-
-	var data []byte
-	data = append(data, paddedAddress...)
-	data = append(data, paddedValue...)
-	data = append(data, paddedNonce...)
-
-	return data, nil
-}
-
 func CreateNewMessage(address common.Address, cAddress common.Address, value *big.Int, nonce *big.Int, priv *ecdsa.PrivateKey) (common.Hash, []byte, error) {
 	data, err := formatData(address, cAddress, value, nonce)
 	if err != nil {
@@ -344,8 +280,8 @@ func CreateNewMessage(address common.Address, cAddress common.Address, value *bi
 
 // TODO split this function so one can decide who is creating the signature
 func (c *Channel) CreateSignatures(value *big.Int, nonce *big.Int) error {
-	bob := common.HexToAddress(c.store.Accounts["bob"].Address)
-	alice := common.HexToAddress(c.store.Accounts["alice"].Address)
+	bob := c.accounts["bob"].address
+	alice := c.accounts["alice"].address
 	pr, sig, err := CreateNewMessage(alice, c.address, value, nonce, c.privKeyA)
 	if err != nil {
 		return err
@@ -361,10 +297,9 @@ func (c *Channel) CreateSignatures(value *big.Int, nonce *big.Int) error {
 		Nonce:      nonce.String(),
 		Proof:      pr.String(),
 	}
-	c.store.PaymentProofs = append(c.store.PaymentProofs, paymentProof)
-	// UPDATE THE VALUE IN THE CHANNEL TO CHANGE
-	c.store.LatestBalance = value.String()
-	err = c.store.Save()
+	c.paymentProofs = append(c.paymentProofs, paymentProof)
+	c.latestBalance = value
+	err = c.store.Save(c)
 	if err != nil {
 		return err
 	}
@@ -397,13 +332,13 @@ func (c *Channel) VerifyMessages() error {
 		proof := common.HexToHash(latestProof.Proof)
 		// TODO change this
 		if sig.From == "alice" {
-			err = validateMessage(paymentChannel, sigb, proof, common.HexToAddress(c.store.Accounts["alice"].Address), v, n)
+			err = validateMessage(paymentChannel, sigb, proof, c.accounts["alice"].address, v, n)
 			if err != nil {
 				return err
 			}
 
 		} else {
-			err = validateMessage(paymentChannel, sigb, proof, common.HexToAddress(c.store.Accounts["bob"].Address), v, n)
+			err = validateMessage(paymentChannel, sigb, proof, c.accounts["bob"].address, v, n)
 			if err != nil {
 				return err
 			}
@@ -412,6 +347,33 @@ func (c *Channel) VerifyMessages() error {
 	}
 	return nil
 
+}
+
+// TODO
+// - Add closing time, timeout time, challenge time to info
+// - Add a transaction viewing function that tracks the transactions from alice to bob
+func (c *Channel) Info() {
+	fmt.Println(fmt.Sprintf(`
+
+	So far:
+
+	Globals:
+		totalBalance: %s,
+		latestBalance:        %s,
+		address:      %s,
+
+		PaymentProofs: %+v
+	
+	`, c.totalBalance.String(), c.latestBalance.String(), c.address.String(), c.paymentProofs))
+}
+
+func (c *Channel) Balance() {
+	fmt.Println(fmt.Sprintf(`
+	-------------------	
+	|Alice: %s|Bob: %s|
+	-------------------
+	
+	`, util.ToDecimal(new(big.Int).Sub(c.totalBalance, c.latestBalance)), util.ToDecimal(c.latestBalance)))
 }
 
 func validateMessage(paymentChannel *bindings.SinglePaymentChannel, signature []byte, proof common.Hash, originator common.Address, value *big.Int, nonce *big.Int) error {
@@ -428,17 +390,25 @@ func validateMessage(paymentChannel *bindings.SinglePaymentChannel, signature []
 	return nil
 }
 
-func (c *Channel) Info() {
-	fmt.Println(fmt.Sprintf(`
+func connect() (*ethclient.Client, error) {
+	client, err := ethclient.Dial("http://127.0.0.1:7545")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return client, err
+}
 
-	So far:
+func formatData(address common.Address, contractAddress common.Address, value *big.Int, nonce *big.Int) ([]byte, error) {
 
-	Globals:
-		totalBalance: %s,
-		latestBalance:        %s,
-		address:      %s,
+	paddedAddress := (contractAddress.Bytes())
+	// Let's pad the values so they are uint256
+	paddedValue := common.LeftPadBytes(value.Bytes(), 32)
+	paddedNonce := common.LeftPadBytes(nonce.Bytes(), 32)
 
-	
-	`, c.totalBalance.String(), c.latestBalance.String(), c.address.String()))
-	spew.Dump(c.store.PaymentProofs)
+	var data []byte
+	data = append(data, paddedAddress...)
+	data = append(data, paddedValue...)
+	data = append(data, paddedNonce...)
+
+	return data, nil
 }

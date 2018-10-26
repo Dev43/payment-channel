@@ -14,7 +14,6 @@ import (
 )
 
 // For open
-var OpenValue string
 var With string
 
 // For Sign
@@ -23,8 +22,6 @@ var From string // not used for now
 
 func init() {
 	// open
-	openCmd.Flags().StringVarP(&OpenValue, "value", "v", "0", "value of Ether used to open the payment channel")
-	openCmd.MarkFlagRequired("value")
 	openCmd.Flags().StringVarP(&With, "with", "w", util.ZeroAddress, "With which address to open the payment channel")
 	channelCmd.AddCommand(openCmd)
 
@@ -62,7 +59,7 @@ var openCmd = &cobra.Command{
 	Short: "Open a channel",
 	Long:  "Open a channel",
 	Run: func(cmd *cobra.Command, args []string) {
-		value, ok := new(big.Int).SetString(OpenValue, 10)
+		value, ok := new(big.Int).SetString(args[0], 10)
 		if !ok {
 			log.Fatal(errors.New("Could not set the string inputted to a big.Int"))
 		}

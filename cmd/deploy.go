@@ -26,10 +26,6 @@ var deployCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = c.Save()
-		if err != nil {
-			log.Fatal(err)
-		}
 		fmt.Printf("Contract deployed at address %s\n", address.String())
 	},
 }
