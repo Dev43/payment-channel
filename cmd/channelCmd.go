@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strconv"
 
 	"github.com/Dev43/payment-channel/channel"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 )
 
 // Nonce flag
@@ -37,6 +39,12 @@ func init() {
 
 	// rootCmd
 	rootCmd.AddCommand(channelCmd)
+
+	// Generate markdown tree command dynamically
+	err := doc.GenMarkdownTree(rootCmd, "./docs")
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 var channelCmd = &cobra.Command{
@@ -57,9 +65,8 @@ var channelCmd = &cobra.Command{
 }
 
 var openCmd = &cobra.Command{
-	Use:   "open",
-	Short: "Open a channel",
-	Long:  "Open a channel",
+	Use:   "open [value]",
+	Short: "Open a payment channel between Alice and Bob",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		value, ok := new(big.Int).SetString(args[0], 10)
@@ -80,9 +87,8 @@ var openCmd = &cobra.Command{
 }
 
 var signCmd = &cobra.Command{
-	Use:   "sign",
-	Short: "Sign a message",
-	Long:  "Sign a message",
+	Use:   "sign [value]",
+	Short: "Signs messages with a specific value attached to it",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
@@ -115,7 +121,7 @@ var signCmd = &cobra.Command{
 // TO DO, ask the user which signature to verify
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
-	Short: "verify the last message",
+	Short: "verifies the messages that are stored",
 	Run: func(cmd *cobra.Command, args []string) {
 		c, err := channel.NewChannel()
 		if err != nil {
@@ -132,8 +138,7 @@ var verifyCmd = &cobra.Command{
 
 var closeCmd = &cobra.Command{
 	Use:   "close",
-	Short: "close the channel",
-	Long:  "close the channel",
+	Short: "closes the payment channel",
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
 		// can change the nonce if needed
@@ -141,7 +146,15 @@ var closeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = c.Close()
+		if len(args) > 0 {
+			index, err := strconv.ParseInt(args[0], 10, 32)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = c.Close(int(index))
+		} else {
+			err = c.Close(0)
+		}
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -151,10 +164,11 @@ var closeCmd = &cobra.Command{
 }
 
 var challengeCmd = &cobra.Command{
-	Use:   "challenge",
-	Short: "challenge the channel",
-	Long:  "challenge the channel",
-	Args:  cobra.MinimumNArgs(1),
+	Use:       "challenge [from]",
+	Short:     "challenges the payment channel",
+	Long:      "challenges the payment channel, from can either be alice or bob",
+	ValidArgs: []string{"alice", "bob"},
+	Args:      cobra.OnlyValidArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
 		// can change the nonce if needed
@@ -173,8 +187,7 @@ var challengeCmd = &cobra.Command{
 
 var finalizeCmd = &cobra.Command{
 	Use:   "finalize",
-	Short: "finalize the channel",
-	Long:  "finalize the channel",
+	Short: "finalizes the payment channel",
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
 		// can change the nonce if needed

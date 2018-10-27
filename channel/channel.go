@@ -164,14 +164,22 @@ func (c *Channel) Open(openingValue *big.Int) error {
 }
 
 // Close initiates the closure of our channel, which is not immediate as there is a challenge period
-func (c *Channel) Close() error {
+func (c *Channel) Close(index int) error {
 	var sigs [2][]byte
 	var r, rb, s, sb [32]byte
 	var v, vb uint8
+	var proofIndex int
 	if len(c.paymentProofs) == 0 {
 		return errors.New("No proofs")
 	}
-	latestProof := c.paymentProofs[len(c.paymentProofs)-1]
+	if proofIndex > len(c.paymentProofs)-1 {
+		return errors.New("proof does not exist at this index")
+	}
+	proofIndex = index
+	if proofIndex == 0 {
+		proofIndex = len(c.paymentProofs) - 1
+	}
+	latestProof := c.paymentProofs[proofIndex]
 	for i, sig := range latestProof.Signatures {
 		s, err := hexutil.Decode(sig.Sig)
 		if err != nil {
@@ -311,6 +319,7 @@ func (c *Channel) Challenge(from string) error {
 		return errors.New("Undefined error when challenging the channel")
 	}
 	c.state = "challenged"
+	c.latestBalance = value
 	c.store.Save(c)
 	if err != nil {
 		return err
@@ -420,14 +429,19 @@ func (c *Channel) Info() {
 	} else {
 		pp.Println("No payment proof yet")
 	}
+	pChannel, _ := bindings.NewSinglePaymentChannelCaller(c.address, c.client)
+	latestProof, _ := pChannel.LastPaymentProof(&bind.CallOpts{})
+	pp.Println("Closing proof:")
+	pp.Printf("value: %s\n", latestProof.Value.String())
+	pp.Printf("nonce: %s\n", latestProof.Nonce.String())
 }
 
 // Balance outputs the balance of both alice and Bob
 func (c *Channel) Balance() {
 	if c.state != "finalized" {
-		pp.Printf("Alice's channel balance: %s\n Bob's channel balance: %s\n", util.ToDecimal(new(big.Int).Sub(c.totalBalance, c.latestBalance)).StringFixed(18), util.ToDecimal(c.latestBalance).StringFixed(18))
+		pp.Printf("Alice's channel balance: %s\nBob's channel balance: %s\n", util.ToDecimal(new(big.Int).Sub(c.totalBalance, c.latestBalance)).StringFixed(18), util.ToDecimal(c.latestBalance).StringFixed(18))
 	} else {
-		pp.Printf("Alice balance: %s\n Bob's balance: %s\n", util.ToDecimal(big.NewInt(0)).StringFixed(18), util.ToDecimal(big.NewInt(0)).StringFixed(18))
+		pp.Printf("Alice balance: %s\nBob's balance: %s\n", util.ToDecimal(big.NewInt(0)).StringFixed(18), util.ToDecimal(big.NewInt(0)).StringFixed(18))
 	}
 	for key, val := range c.accounts {
 		bal, _ := c.client.BalanceAt(context.TODO(), val.address, nil)

@@ -15,8 +15,8 @@ func init() {
 
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
-	Short: "Deploy the payment channel contract",
-	Long:  "This function deploys the payment channel contract to a blockchain",
+	Short: "deploy the payment channel contract",
+	Long:  "this function deploys the payment channel contract to a blockchain",
 	Run: func(cmd *cobra.Command, args []string) {
 		c, err := channel.NewChannel()
 		if err != nil {
