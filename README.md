@@ -1,6 +1,6 @@
 # Payment channel CLI tool
 
-## THIS IS STILL A WORK IN PROGRESS
+Little CLI tool written a golang to show how payment channels work
 
 ## TODO
 
@@ -12,10 +12,8 @@
 - [X] Verify -- verifies the signature given and returns a boolean.
 - [X] Close a channel (closes the channel with a specific set of signatures -- only alice can od it)
 - [X] Challenge a channel
-- [ ] Check balances
-- [ ] Output current info
-- [ ] 
-    - [ ] on chain balance
-    - [ ] payment channel balance
-    - [ ] latest transaction message
-    - [ ] Alice's and Bob's public and private key
+- [X] Check balances
+- [X] Output current info 
+    - [X] on chain balance
+    - [X] payment channel balance
+    - [X] latest transaction message

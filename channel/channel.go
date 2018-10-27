@@ -11,6 +11,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/k0kubun/pp"
 
 	"github.com/Dev43/payment-channel/bindings"
 	"github.com/Dev43/payment-channel/cryptoutil"
@@ -20,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
+// Channel keeps all the information necessary for our channel
 type Channel struct {
 	store         Storage
 	client        *ethclient.Client
@@ -30,13 +32,12 @@ type Channel struct {
 	address       common.Address
 	paymentProofs []PaymentProof
 	accounts      map[string]Account
+	state         string // State of the current contract
+	finalizeTime  int64
 }
 
-type Signature struct {
-	Sig  string `json:"sig"`
-	From string `json:"from"`
-}
-
+// Payment proofs are appended to into an array. We keep all of the payment proofs created
+// They aggregate all information neccessary to prove that a payment is valid
 type PaymentProof struct {
 	Signatures []Signature `json:"signatures"`
 	Amount     string      `json:"amount"`
@@ -45,17 +46,20 @@ type PaymentProof struct {
 	Proof      string      `json:"proof"`
 }
 
+// Account struct is where the user accounts are held
 type Account struct {
 	address common.Address
 	privKey *ecdsa.PrivateKey
 }
 
+// Storage is our defined interface to astract our storage layer
 type Storage interface {
 	Create() (*Channel, error)
 	Load() (*Channel, error)
 	Save(*Channel) error
 }
 
+// InitStorage initializes our storage, whatever it is on the backend
 func InitStorage() error {
 	s := NewStorage()
 	_, err := s.Create()
@@ -65,6 +69,8 @@ func InitStorage() error {
 	return nil
 }
 
+// NewChannel initiates our connection to the blockchain and loads all of
+// the data into our channel pointer
 func NewChannel() (*Channel, error) {
 	s := NewStorage()
 	// TODO add diff url
@@ -80,8 +86,15 @@ func NewChannel() (*Channel, error) {
 	return c, nil
 }
 
+// ValidateNonce ensures that the nonce is higher than the last nonce
 func (c *Channel) ValidateNonce(nonce *big.Int) error {
 	sigs := c.paymentProofs
+
+	// Cannot have a signature with a nonce of 0
+	if nonce.Cmp(big.NewInt(0)) == 0 {
+		return errors.New("Invalid nonce, it needs to be higher than the last nonce")
+	}
+
 	// If there are no signatures, then we can use whatever nonce we want
 	if len(sigs) == 0 {
 		return nil
@@ -89,12 +102,13 @@ func (c *Channel) ValidateNonce(nonce *big.Int) error {
 
 	ns := sigs[len(sigs)-1].Nonce
 	lastNonce, _ := new(big.Int).SetString(ns, 10)
-	if nonce.Cmp(lastNonce) < 0 {
-		return errors.New("Invalid nonce, it needs to be equal or higher to the last nonce")
+	if nonce.Cmp(lastNonce) <= 0 {
+		return errors.New("Invalid nonce, it needs to be higher than the last nonce")
 	}
 	return nil
 }
 
+// Deploy is used to deploy our contract to the blockchain
 func (c *Channel) Deploy() (common.Address, error) {
 
 	auth := bind.NewKeyedTransactor(c.privKeyA)
@@ -104,6 +118,7 @@ func (c *Channel) Deploy() (common.Address, error) {
 		return common.Address{}, err
 	}
 	c.address = contractAddress
+	c.state = "deployed"
 	err = c.store.Save(c)
 	if err != nil {
 		return common.Address{}, err
@@ -111,12 +126,10 @@ func (c *Channel) Deploy() (common.Address, error) {
 	return contractAddress, nil
 }
 
-func (c *Channel) Open(openingValue *big.Int, counterParty common.Address) error {
+// Open opens our payment channel with an inital value
+func (c *Channel) Open(openingValue *big.Int) error {
 	// For now alice's priv key
-	cp := counterParty
-	if cp == common.HexToAddress(util.ZeroAddress) {
-		cp = c.accounts["bob"].address
-	}
+	cp := c.accounts["bob"].address
 	if c.address.String() == util.ZeroAddress {
 		return errors.New("You need to deploy a contract first")
 	}
@@ -142,14 +155,19 @@ func (c *Channel) Open(openingValue *big.Int, counterParty common.Address) error
 		return fmt.Errorf("Problem at the EVM execution level for transaction %s ", receipt.TxHash.String())
 	}
 	c.totalBalance = openingValue
+	c.state = "opened"
 	c.store.Save(c)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
+// Close initiates the closure of our channel, which is not immediate as there is a challenge period
 func (c *Channel) Close() error {
 	var sigs [2][]byte
-	var r, s [32]byte
-	var v uint8
+	var r, rb, s, sb [32]byte
+	var v, vb uint8
 	if len(c.paymentProofs) == 0 {
 		return errors.New("No proofs")
 	}
@@ -163,6 +181,7 @@ func (c *Channel) Close() error {
 	}
 
 	r, s, v = cryptoutil.ExtractRSVFromSignature(sigs[0])
+	rb, sb, vb = cryptoutil.ExtractRSVFromSignature(sigs[1])
 
 	value, ok := new(big.Int).SetString(latestProof.Amount, 10)
 	if !ok {
@@ -179,7 +198,7 @@ func (c *Channel) Close() error {
 		return err
 	}
 
-	tx, err := paymentChannel.CloseChannel(auth, common.HexToHash(latestProof.Proof), v, r, s, value, nonce)
+	tx, err := paymentChannel.CloseChannel(auth, common.HexToHash(latestProof.Proof), [2]uint8{v, vb}, [2][32]byte{r, rb}, [2][32]byte{s, sb}, value, nonce)
 	if err != nil {
 		return err
 	}
@@ -190,10 +209,27 @@ func (c *Channel) Close() error {
 	if receipt.Status != 1 {
 		return errors.New("Undefined error when closing the channel")
 	}
+	chStart, err := paymentChannel.StartChallengePeriod(nil)
+	if err != nil {
+		return err
+	}
+	chPeriodLength, err := paymentChannel.ChallengePeriodLength(nil)
+	if err != nil {
+		return err
+	}
+	// Set the challenge period
+	finalizeTime := new(big.Int).Add(chStart, chPeriodLength).Int64()
+	c.state = "closed"
+	c.finalizeTime = finalizeTime
+	c.store.Save(c)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-// finalize
+// Finalize is called only after the finalize time has passed.
+// It distributes the to bob and alice
 func (c *Channel) Finalize() error {
 	auth := bind.NewKeyedTransactor(c.privKeyA)
 	auth.GasLimit = 300000
@@ -213,26 +249,40 @@ func (c *Channel) Finalize() error {
 	if receipt.Status != 1 {
 		return errors.New("Undefined error when closing the channel")
 	}
+	c.state = "finalized"
+	c.store.Save(c)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (c *Channel) Challenge() error {
-	var sigs [2][]byte
+// Challenge can be done after a channel is closed but before it is finalized
+// it needs the opponent's signature for it to work
+func (c *Channel) Challenge(from string) error {
+	_, ok := c.accounts[from]
+	if !ok {
+		return errors.New("account does not exist")
+	}
+	var opponentSig []byte
 	var r, s [32]byte
 	var v uint8
 	if len(c.paymentProofs) == 0 {
 		return errors.New("No proofs")
 	}
 	latestProof := c.paymentProofs[len(c.paymentProofs)-1]
-	for i, sig := range latestProof.Signatures {
-		s, err := hexutil.Decode(sig.Sig)
-		if err != nil {
-			return err
+	// Get the opponent's signature
+	for _, sig := range latestProof.Signatures {
+		if sig.From != from {
+			s, err := hexutil.Decode(sig.Sig)
+			if err != nil {
+				return err
+			}
+			opponentSig = s
 		}
-		sigs[i] = s
 	}
 
-	r, s, v = cryptoutil.ExtractRSVFromSignature(sigs[0])
+	r, s, v = cryptoutil.ExtractRSVFromSignature(opponentSig)
 
 	value, ok := new(big.Int).SetString(latestProof.Amount, 10)
 	if !ok {
@@ -260,32 +310,29 @@ func (c *Channel) Challenge() error {
 	if receipt.Status != 1 {
 		return errors.New("Undefined error when challenging the channel")
 	}
+	c.state = "challenged"
+	c.store.Save(c)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func CreateNewMessage(address common.Address, cAddress common.Address, value *big.Int, nonce *big.Int, priv *ecdsa.PrivateKey) (common.Hash, []byte, error) {
-	data, err := formatData(address, cAddress, value, nonce)
-	if err != nil {
-		return common.Hash{}, nil, err
-	}
-	proof := crypto.Keccak256Hash(data)
-	signature, err := cryptoutil.Sign(proof, priv)
-	if err != nil {
-		return common.Hash{}, nil, err
-	}
-	return proof, signature, nil
-}
-
-// TODO split this function so one can decide who is creating the signature
+// CreateSignatures creates both alice's and bob's signatures
 func (c *Channel) CreateSignatures(value *big.Int, nonce *big.Int) error {
+	bob := c.accounts["bob"].address
 	alice := c.accounts["alice"].address
-	pr, sig, err := CreateNewMessage(alice, c.address, value, nonce, c.privKeyA)
+	pr, sig, err := createNewMessage(alice, c.address, value, nonce, c.privKeyA)
+	if err != nil {
+		return err
+	}
+	pr, sigb, err := createNewMessage(bob, c.address, value, nonce, c.privKeyB)
 	if err != nil {
 		return err
 	}
 
 	paymentProof := PaymentProof{
-		Signatures: []Signature{{Sig: hexutil.Encode(sig), From: "alice"}},
+		Signatures: []Signature{{Sig: hexutil.Encode(sig), From: "alice"}, {Sig: hexutil.Encode(sigb), From: "bob"}},
 		Amount:     value.String(),
 		Date:       time.Now().String(),
 		Nonce:      nonce.String(),
@@ -300,6 +347,20 @@ func (c *Channel) CreateSignatures(value *big.Int, nonce *big.Int) error {
 	return nil
 }
 
+// CreateSignature creates only 1 signature based on who it's from
+func (c *Channel) CreateSignature(from string, value *big.Int, nonce *big.Int) (Signature, error) {
+	acct, ok := c.accounts[from]
+	if !ok {
+		return Signature{}, errors.New("account does not exist")
+	}
+	_, sig, err := createNewMessage(acct.address, c.address, value, nonce, c.privKeyA)
+	if err != nil {
+		return Signature{}, err
+	}
+	return Signature{Sig: hexutil.Encode(sig), From: from}, nil
+}
+
+// VerifyMessages verifies the last two messages sent and ensures that everything is correct
 func (c *Channel) VerifyMessages() error {
 	paymentChannel, err := bindings.NewSinglePaymentChannel(c.address, c.client)
 	if err != nil {
@@ -324,8 +385,9 @@ func (c *Channel) VerifyMessages() error {
 			return errors.New("could not switch to big.Int")
 		}
 		proof := common.HexToHash(latestProof.Proof)
-		// TODO change this
-		err = validateMessage(paymentChannel, sigb, proof, v, n)
+
+		originator := c.accounts[sig.From].address
+		err = validateMessage(paymentChannel, sigb, proof, v, n, originator)
 		if err != nil {
 			return err
 		}
@@ -335,38 +397,49 @@ func (c *Channel) VerifyMessages() error {
 
 }
 
-// TODO
-// - Add closing time, timeout time, challenge time to info
-// - Add a transaction viewing function that tracks the transactions from alice to bob
+// Info simply outputs some useful information to visualize
 func (c *Channel) Info() {
-	fmt.Println(fmt.Sprintf(`
+	var timeRemaining int64
+	b, _ := c.client.HeaderByNumber(context.TODO(), nil)
+	pp.Printf("Channel state: %s\n", c.state)
+	if c.finalizeTime == 0 {
+		pp.Printf("Channel finalize time: %s\n", "not set")
+	} else {
+		pp.Printf("Channel finalize time: %s\n", c.finalizeTime)
+		timeRemaining = c.finalizeTime - b.Time.Int64()
+	}
 
-	So far:
-
-	Globals:
-		totalBalance: %s,
-		latestBalance:        %s,
-		address:      %s,
-
-		PaymentProofs: %+v
-	
-	`, c.totalBalance.String(), c.latestBalance.String(), c.address.String(), c.paymentProofs))
+	pp.Printf("Current Block time %s\n", b.Time.Int64())
+	pp.Printf("Time remaining before finalized channel %s seconds\n", timeRemaining)
+	pp.Printf("Total payment channel balance %s\n", c.totalBalance.String())
+	pp.Printf("Total balance sent from Alice %s\n", c.latestBalance.String())
+	pp.Printf("Contract address %s\n", c.address.String())
+	pp.Print("Latest proof: ")
+	if len(c.paymentProofs) > 0 {
+		pp.Println(c.paymentProofs[len(c.paymentProofs)-1])
+	} else {
+		pp.Println("No payment proof yet")
+	}
 }
 
+// Balance outputs the balance of both alice and Bob
 func (c *Channel) Balance() {
-	fmt.Println(fmt.Sprintf(`
-	-------------------	
-	|Alice: %s|Bob: %s|
-	-------------------
-	
-	`, util.ToDecimal(new(big.Int).Sub(c.totalBalance, c.latestBalance)), util.ToDecimal(c.latestBalance)))
+	if c.state != "finalized" {
+		pp.Printf("Alice's channel balance: %s\n Bob's channel balance: %s\n", util.ToDecimal(new(big.Int).Sub(c.totalBalance, c.latestBalance)).StringFixed(18), util.ToDecimal(c.latestBalance).StringFixed(18))
+	} else {
+		pp.Printf("Alice balance: %s\n Bob's balance: %s\n", util.ToDecimal(big.NewInt(0)).StringFixed(18), util.ToDecimal(big.NewInt(0)).StringFixed(18))
+	}
+	for key, val := range c.accounts {
+		bal, _ := c.client.BalanceAt(context.TODO(), val.address, nil)
+		pp.Printf("Current balance for %s: %s\n", key, util.ToDecimal(bal).StringFixed(18))
+	}
 }
 
-func validateMessage(paymentChannel *bindings.SinglePaymentChannel, signature []byte, proof common.Hash, value *big.Int, nonce *big.Int) error {
+func validateMessage(paymentChannel *bindings.SinglePaymentChannel, signature []byte, proof common.Hash, value *big.Int, nonce *big.Int, originator common.Address) error {
 	// Extract the r,s,v of the signature
 	r, s, v := cryptoutil.ExtractRSVFromSignature(signature)
 	// Let's verify our signature is correct
-	ok, err := paymentChannel.SinglePaymentChannelCaller.VerifyValidityOfMessage(nil, proof, v, r, s, value, nonce)
+	ok, err := paymentChannel.SinglePaymentChannelCaller.VerifyValidityOfMessage(nil, proof, v, r, s, value, nonce, originator)
 	if err != nil {
 		return err
 	}
@@ -397,4 +470,17 @@ func formatData(address common.Address, contractAddress common.Address, value *b
 	data = append(data, paddedNonce...)
 
 	return data, nil
+}
+
+func createNewMessage(address common.Address, cAddress common.Address, value *big.Int, nonce *big.Int, priv *ecdsa.PrivateKey) (common.Hash, []byte, error) {
+	data, err := formatData(address, cAddress, value, nonce)
+	if err != nil {
+		return common.Hash{}, nil, err
+	}
+	proof := crypto.Keccak256Hash(data)
+	signature, err := cryptoutil.Sign(proof, priv)
+	if err != nil {
+		return common.Hash{}, nil, err
+	}
+	return proof, signature, nil
 }

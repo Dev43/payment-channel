@@ -14,6 +14,6 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number of payment_channel",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Payment channel visualizer 0.1 -- HEAD")
+		fmt.Println("Payment channel learning tool 0.1 -- HEAD")
 	},
 }

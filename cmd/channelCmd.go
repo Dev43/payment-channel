@@ -7,26 +7,20 @@ import (
 	"math/big"
 
 	"github.com/Dev43/payment-channel/channel"
-	"github.com/Dev43/payment-channel/util"
-	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/spf13/cobra"
 )
 
-// For open
-var With string
-
-// For Sign
+// Nonce flag
 var Nonce string
-var From string // not used for now
 
 func init() {
 	// open
-	openCmd.Flags().StringVarP(&With, "with", "w", util.ZeroAddress, "With which address to open the payment channel")
 	channelCmd.AddCommand(openCmd)
 
 	// sign
 	signCmd.Flags().StringVarP(&Nonce, "nonce", "n", "0", "Nonce to use")
+	signCmd.MarkFlagRequired("nonce")
 	channelCmd.AddCommand(signCmd)
 
 	// verify
@@ -49,6 +43,14 @@ var channelCmd = &cobra.Command{
 	Use:   "channel",
 	Short: "Channel functions",
 	Long:  `All channel functions`,
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		c, err := channel.NewChannel()
+		if err != nil {
+			log.Fatal(err)
+		}
+		c.Info()
+		c.Balance()
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("You need to give me arguments")
 	},
@@ -58,17 +60,17 @@ var openCmd = &cobra.Command{
 	Use:   "open",
 	Short: "Open a channel",
 	Long:  "Open a channel",
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		value, ok := new(big.Int).SetString(args[0], 10)
 		if !ok {
 			log.Fatal(errors.New("Could not set the string inputted to a big.Int"))
 		}
-		otherAddress := common.HexToAddress(With)
 		c, err := channel.NewChannel()
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = c.Open(value, otherAddress)
+		err = c.Open(value)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -81,6 +83,7 @@ var signCmd = &cobra.Command{
 	Use:   "sign",
 	Short: "Sign a message",
 	Long:  "Sign a message",
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
 		// can change the nonce if needed
@@ -106,18 +109,14 @@ var signCmd = &cobra.Command{
 		}
 
 		fmt.Println("Signatures verified")
-		c.Info()
 	},
 }
 
 // TO DO, ask the user which signature to verify
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
-	Short: "verify both messages",
-	Long:  "verify both messages",
+	Short: "verify the last message",
 	Run: func(cmd *cobra.Command, args []string) {
-		// the first argument is the amount to sign
-		// can change the nonce if needed
 		c, err := channel.NewChannel()
 		if err != nil {
 			log.Fatal(err)
@@ -155,6 +154,7 @@ var challengeCmd = &cobra.Command{
 	Use:   "challenge",
 	Short: "challenge the channel",
 	Long:  "challenge the channel",
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
 		// can change the nonce if needed
@@ -162,7 +162,7 @@ var challengeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = c.Challenge()
+		err = c.Challenge(args[0])
 		if err != nil {
 			log.Fatal(err)
 		}

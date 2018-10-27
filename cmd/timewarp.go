@@ -15,7 +15,7 @@ func init() {
 }
 
 var timeCmd = &cobra.Command{
-	Use:   "time",
+	Use:   "timewarp",
 	Short: "Advance time",
 	Long:  "Bring time forward",
 	Run: func(cmd *cobra.Command, args []string) {

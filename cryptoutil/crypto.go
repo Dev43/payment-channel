@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/signer/core"
 )
 
+// GenerateKeyPair is a utility function to generate and format a new key pair for our use
 func GenerateKeyPair() (common.Address, *ecdsa.PrivateKey) {
 	priv, err := crypto.GenerateKey()
 	if err != nil {
@@ -26,14 +27,16 @@ func GenerateKeyPair() (common.Address, *ecdsa.PrivateKey) {
 	return address, priv
 }
 
+// SignHash prefixes our string to hash with "\x19Ethereum Signed Message:\n32" and takes the
+// keccack256 hash of it
 func SignHash(data string) ([]byte, string) {
 	msg := fmt.Sprintf("\x19Ethereum Signed Message:\n32" + data)
 	fmt.Println("the msg is", msg)
 	return crypto.Keccak256([]byte(msg)), msg
 }
 
+// Sign does all the necessary steps to correctly hash and sign an ethereum message
 func Sign(proof common.Hash, priv *ecdsa.PrivateKey) ([]byte, error) {
-
 	// We need to hash the proof  with "\x19Ethereum Signed Message:\n%d%s"
 	hash, _ := core.SignHash(proof.Bytes())
 	// Sign using a private key
@@ -44,7 +47,7 @@ func Sign(proof common.Hash, priv *ecdsa.PrivateKey) ([]byte, error) {
 	return signature, nil
 }
 
-// ExtractRSVFromSignature signatures R S V returned as arrays
+// ExtractRSVFromSignature extracts the R,S,V from the signature
 func ExtractRSVFromSignature(sig []byte) ([32]byte, [32]byte, uint8) {
 	sigstr := common.Bytes2Hex(sig)
 	rS := sigstr[0:64]

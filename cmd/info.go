@@ -21,5 +21,6 @@ var infoCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		c.Info()
+		c.Balance()
 	},
 }

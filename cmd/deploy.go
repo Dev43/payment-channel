@@ -26,6 +26,7 @@ var deployCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("Contract deployed at address %s\n", address.String())
+		c.Info()
+		fmt.Printf("Contract deployed at address %s, you may now open a payment channel\n", address.String())
 	},
 }

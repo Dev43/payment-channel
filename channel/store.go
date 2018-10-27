@@ -15,23 +15,35 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
+// JsonStorage is our JSON struct that will be marshalled into our file storage
 type JsonStorage struct {
 	PaymentProofs   []PaymentProof  `json:"payment_proof"`
 	TotalBalance    string          `json:"total_balance"`
 	LatestBalance   string          `json:"latest_balance"`
 	Accounts        map[string]Keys `json:"accounts"`
 	ContractAddress string          `json:"contract_address"`
+	ContractState   string          `json:"contract_state"`
+	FinalizeTime    int64           `json:"finalize_time"`
 }
 
+// Signature holds our signature
+type Signature struct {
+	Sig  string `json:"sig"`
+	From string `json:"from"`
+}
+
+// Keys are the address and private key of an account
 type Keys struct {
 	Address    string `json:"address"`
 	PrivateKey string `json:"private_key"`
 }
 
+// NewStorage initiates a JsonStorage pointer
 func NewStorage() *JsonStorage {
 	return &JsonStorage{}
 }
 
+// Create initializes our Json storage struct and saves it to the filesystem
 func (j *JsonStorage) Create() (*Channel, error) {
 	if ok := exists(); !ok {
 		return nil, errors.New("Storage already exists")
@@ -56,16 +68,7 @@ func (j *JsonStorage) Create() (*Channel, error) {
 		Address:    bob.String(),
 		PrivateKey: hexutil.Encode(crypto.FromECDSA(bobPriv)),
 	}
-	// aliceKey, alicePriv := cryptoutil.GenerateKeyPair()
-	// bobKey, bobPriv := cryptoutil.GenerateKeyPair()
-	// aliceKeys := Keys{
-	// 	Address:    aliceKey.String(),
-	// 	PrivateKey: hexutil.Encode(crypto.FromECDSA(alicePriv)),
-	// }
-	// bobKeys := Keys{
-	// 	Address:    bobKey.String(),
-	// 	PrivateKey: hexutil.Encode(crypto.FromECDSA(bobPriv)),
-	// }
+
 	s := JsonStorage{
 		TotalBalance:  "0",
 		LatestBalance: "0",
@@ -74,6 +77,8 @@ func (j *JsonStorage) Create() (*Channel, error) {
 			"bob":   bobKeys,
 		},
 		ContractAddress: util.ZeroAddress,
+		ContractState:   "init",
+		FinalizeTime:    0,
 	}
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -83,6 +88,8 @@ func (j *JsonStorage) Create() (*Channel, error) {
 	return nil, nil
 }
 
+// Load takes looks to see if a storage file exists and if it does loads it into the program and
+// converts all necessary properties and injects it into a new channel instance
 func (j *JsonStorage) Load() (*Channel, error) {
 	ok := exists()
 	if !ok {
@@ -143,6 +150,8 @@ func (j *JsonStorage) Load() (*Channel, error) {
 		address:       cAddr,
 		paymentProofs: j.PaymentProofs,
 		accounts:      accts,
+		state:         j.ContractState,
+		finalizeTime:  j.FinalizeTime,
 	}
 
 	return &c, nil
@@ -158,10 +167,14 @@ func exists() bool {
 	return true
 }
 
+// Save takes our current channel pointer and saves its properties in the filesystem, overwriting the
+// last storage file
 func (j *JsonStorage) Save(c *Channel) error {
 	j.TotalBalance = c.totalBalance.String()
 	j.LatestBalance = c.latestBalance.String()
 	j.ContractAddress = c.address.String()
+	j.ContractState = c.state
+	j.FinalizeTime = c.finalizeTime
 	accts := make(map[string]Keys)
 	for key, value := range c.accounts {
 		priv := hexutil.Encode(crypto.FromECDSA(value.privKey))
