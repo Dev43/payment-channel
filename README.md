@@ -1,7 +1,9 @@
 # Payment channel CLI tool
 
-Little CLI tool written a golang to show how payment channels work for the [ethinitium](https://github.com/Dev43/ethinitium) blockchain course
+>Little CLI tool written a golang to show how payment channels work for the [ethinitium](https://github.com/Dev43/ethinitium) blockchain course
 
+[![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Dev43/payment-channel/blob/master/LICENSE.md)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Dev43/payment-channel)](https://goreportcard.com/report/github.com/Dev43/payment-channel)
 ## Instructions of use
 
 1) Run `ganache` on port `7545`
