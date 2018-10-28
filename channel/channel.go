@@ -36,8 +36,8 @@ type Channel struct {
 	finalizeTime  int64
 }
 
-// Payment proofs are appended to into an array. We keep all of the payment proofs created
-// They aggregate all information neccessary to prove that a payment is valid
+// PaymentProof are appended to into an array. We keep all of the payment proofs created
+// They aggregate all information necessary to prove that a payment is valid
 type PaymentProof struct {
 	Signatures []Signature `json:"signatures"`
 	Amount     string      `json:"amount"`
@@ -126,7 +126,7 @@ func (c *Channel) Deploy() (common.Address, error) {
 	return contractAddress, nil
 }
 
-// Open opens our payment channel with an inital value
+// Open opens our payment channel with an initial value
 func (c *Channel) Open(openingValue *big.Int) error {
 	// For now alice's priv key
 	cp := c.accounts["bob"].address

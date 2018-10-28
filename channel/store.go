@@ -136,11 +136,11 @@ func (j *JsonStorage) Load() (*Channel, error) {
 		cAddr = common.HexToAddress(j.ContractAddress)
 	}
 	accts := map[string]Account{
-		"alice": Account{
+		"alice": {
 			address: common.HexToAddress(j.Accounts["alice"].Address),
 			privKey: privEcdsa,
 		},
-		"bob": Account{
+		"bob": {
 			address: common.HexToAddress(j.Accounts["bob"].Address),
 			privKey: privEcdsaB,
 		},

@@ -23,6 +23,6 @@ var initCmd = &cobra.Command{
 			log.Fatal("Error: ", err)
 		}
 
-		fmt.Println("New payment channel initalized, you may now deploy the contract")
+		fmt.Println("New payment channel initialized, you may now deploy the contract")
 	},
 }

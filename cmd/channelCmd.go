@@ -146,6 +146,9 @@ var closeCmd = &cobra.Command{
 				log.Fatal(err)
 			}
 			err = c.Close(int(index))
+			if err != nil {
+				log.Fatal(err)
+			}
 		} else {
 			err = c.Close(0)
 		}

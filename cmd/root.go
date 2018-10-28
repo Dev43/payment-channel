@@ -12,6 +12,7 @@ var rootCmd = &cobra.Command{
 	Long:  `CLI tool to understand and visualize how payment channels work`,
 }
 
+// Execute is our top line function for all CLI commands
 func Execute() {
 
 	if err := rootCmd.Execute(); err != nil {
