@@ -1,6 +1,6 @@
 # Payment channel CLI tool
 
-Little CLI tool written a golang to show how payment channels work
+Little CLI tool written a golang to show how payment channels work for the [ethinitium](https://github.com/Dev43/ethinitium) blockchain course
 
 ## Instructions of use
 
@@ -24,3 +24,4 @@ To challenge this channel, only 1 signature from the opponent is needed, with a 
 Basic flow of the application:
 
 `init` -> `deploy` -> `open` -> `sign` -> `close` -> `challenge` (maybe) -> `timewarp` -> `finalize`
+
