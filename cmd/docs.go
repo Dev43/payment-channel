@@ -16,7 +16,7 @@ var docCmd = &cobra.Command{
 	Short: "Generate markdown docs for payment_channel",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Generate markdown tree command dynamically
-		err := doc.GenMarkdownTree(cmd, "./docs")
+		err := doc.GenMarkdownTree(rootCmd, "./docs")
 		if err != nil {
 			log.Fatal(err)
 		}

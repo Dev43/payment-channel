@@ -54,15 +54,15 @@ type Account struct {
 
 // Storage is our defined interface to astract our storage layer
 type Storage interface {
-	Create() (*Channel, error)
+	Create(string) (*Channel, error)
 	Load() (*Channel, error)
 	Save(*Channel) error
 }
 
 // InitStorage initializes our storage, whatever it is on the backend
-func InitStorage() error {
+func InitStorage(mnemonic string) error {
 	s := NewStorage()
-	_, err := s.Create()
+	_, err := s.Create(mnemonic)
 	if err != nil {
 		return err
 	}

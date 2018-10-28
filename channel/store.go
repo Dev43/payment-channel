@@ -3,14 +3,16 @@ package channel
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
-	"log"
 	"math/big"
 	"os"
 
+	"github.com/Dev43/payment-channel/cryptoutil"
 	"github.com/Dev43/payment-channel/util"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -44,38 +46,40 @@ func NewStorage() *JsonStorage {
 }
 
 // Create initializes our Json storage struct and saves it to the filesystem
-func (j *JsonStorage) Create() (*Channel, error) {
+// takes in a valid mnemonic with derivation path "m/44'/60'/0'/0/[INDEX]"
+func (j *JsonStorage) Create(mnemonic string) (*Channel, error) {
 	if ok := exists(); !ok {
 		return nil, errors.New("Storage already exists")
 	}
 
-	alice := common.HexToAddress("0x29535aB060046D7020f3B3464527eE24b802c871")
-	bob := common.HexToAddress("0x1b3960dB2F02C23Ed3b816750Dc4BD688B325792")
-	alicePriv, err := crypto.HexToECDSA("d1ea7553648eea5e58f22abf8b03055415d121cdb5c6e7c099e0ff232214c5f6")
+	wallet, err := cryptoutil.MnemonicToKeys(mnemonic)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
+	people := []string{"alice", "bob"}
+	accts := make(map[string]Keys)
+	for i, person := range people {
 
-	bobPriv, err := crypto.HexToECDSA("86feb87fe87829d0519b569e6ef503099d55ee4fb2c5e6a753975f4cef590461")
-	if err != nil {
-		log.Fatal(err)
-	}
-	aliceKeys := Keys{
-		Address:    alice.String(),
-		PrivateKey: hexutil.Encode(crypto.FromECDSA(alicePriv)),
-	}
-	bobKeys := Keys{
-		Address:    bob.String(),
-		PrivateKey: hexutil.Encode(crypto.FromECDSA(bobPriv)),
+		path := hdwallet.MustParseDerivationPath(fmt.Sprint("m/44'/60'/0'/0/", i))
+		account, err := wallet.Derive(path, true)
+		if err != nil {
+			return nil, err
+		}
+		priv, err := wallet.PrivateKeyBytes(account)
+		if err != nil {
+			return nil, err
+		}
+
+		accts[person] = Keys{
+			PrivateKey: hexutil.Encode(priv),
+			Address:    account.Address.String(),
+		}
 	}
 
 	s := JsonStorage{
-		TotalBalance:  "0",
-		LatestBalance: "0",
-		Accounts: map[string]Keys{
-			"alice": aliceKeys,
-			"bob":   bobKeys,
-		},
+		TotalBalance:    "0",
+		LatestBalance:   "0",
+		Accounts:        accts,
 		ContractAddress: util.ZeroAddress,
 		ContractState:   "init",
 		FinalizeTime:    0,

@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/signer/core"
+	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 )
 
 // GenerateKeyPair is a utility function to generate and format a new key pair for our use
@@ -61,4 +62,13 @@ func ExtractRSVFromSignature(sig []byte) ([32]byte, [32]byte, uint8) {
 	V := uint8(vI + 27)
 
 	return R, S, V
+}
+
+// MnemonicToKeys takes a mnemonic and returns a pointer to a wallet
+func MnemonicToKeys(mnemonic string) (*hdwallet.Wallet, error) {
+	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
+	if err != nil {
+		return nil, err
+	}
+	return wallet, nil
 }
