@@ -176,7 +176,8 @@ func (c *Channel) Close(index int) error {
 		return errors.New("proof does not exist at this index")
 	}
 	proofIndex = index
-	if proofIndex == 0 {
+	// If equal to -1, then it's the latest proof
+	if index == -1 {
 		proofIndex = len(c.paymentProofs) - 1
 	}
 	latestProof := c.paymentProofs[proofIndex]

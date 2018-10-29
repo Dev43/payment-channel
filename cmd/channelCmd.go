@@ -131,7 +131,7 @@ var verifyCmd = &cobra.Command{
 }
 
 var closeCmd = &cobra.Command{
-	Use:   "close",
+	Use:   "close [signature index]",
 	Short: "closes the payment channel",
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
@@ -150,10 +150,10 @@ var closeCmd = &cobra.Command{
 				log.Fatal(err)
 			}
 		} else {
-			err = c.Close(0)
-		}
-		if err != nil {
-			log.Fatal(err)
+			err = c.Close(-1)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		fmt.Println("Channel successfully closed")
@@ -165,7 +165,7 @@ var challengeCmd = &cobra.Command{
 	Short:     "challenges the payment channel",
 	Long:      "challenges the payment channel, from can either be alice or bob",
 	ValidArgs: []string{"alice", "bob"},
-	Args:      cobra.OnlyValidArgs,
+	Args:      cobra.ExactValidArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
 		// can change the nonce if needed
