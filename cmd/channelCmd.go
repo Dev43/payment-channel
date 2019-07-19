@@ -165,7 +165,7 @@ var challengeCmd = &cobra.Command{
 	Short:     "challenges the payment channel",
 	Long:      "challenges the payment channel, from can either be alice or bob",
 	ValidArgs: []string{"alice", "bob"},
-	Args:      cobra.ExactValidArgs(1),
+	Args:      cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// the first argument is the amount to sign
 		// can change the nonce if needed

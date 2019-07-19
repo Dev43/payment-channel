@@ -1,0 +1,42 @@
+module github.com/Dev43/payment-channel
+
+go 1.12
+
+require (
+	github.com/Dev43/ethtest v0.0.0-20181019203338-7ac8f0f29091
+	github.com/aristanetworks/goarista v0.0.0-20170210015632-ea17b1a17847
+	github.com/btcsuite/btcd v0.0.0-20181013004428-67e573d211ac
+	github.com/btcsuite/btcutil v0.0.0-20180706230648-ab6388e0c60a
+	github.com/cpuguy83/go-md2man v1.0.8
+	github.com/davecgh/go-spew v1.1.0
+	github.com/deckarep/golang-set v0.0.0-20180603214616-504e848d77ea
+	github.com/edsrzf/mmap-go v0.0.0-20160512033002-935e0e8a636c
+	github.com/ethereum/go-ethereum v1.8.17
+	github.com/go-stack/stack v1.5.4
+	github.com/golang/protobuf v0.0.0-20170726212829-748d386b5c1e
+	github.com/golang/snappy v0.0.0-20170215233205-553a64147049
+	github.com/hashicorp/golang-lru v0.0.0-20160813221303-0a025b7e63ad
+	github.com/huin/goupnp v0.0.0-20161224104101-679507af18f3
+	github.com/inconshreveable/mousetrap v1.0.0
+	github.com/jackpal/go-nat-pmp v0.0.0-20160603034137-1fa385a6f458
+	github.com/k0kubun/pp v2.3.0+incompatible
+	github.com/karalabe/hid v0.0.0-20170821103837-f00545f9f374
+	github.com/mattn/go-colorable v0.0.9
+	github.com/mattn/go-isatty v0.0.4
+	github.com/miguelmota/go-ethereum-hdwallet v0.0.0-20181004120025-8af197af5b28
+	github.com/pborman/uuid v0.0.0-20170112150404-1b00554d8222
+	github.com/rjeczalik/notify v0.9.1
+	github.com/rs/cors v1.6.0
+	github.com/russross/blackfriday v1.5.2
+	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
+	github.com/spf13/cobra v0.0.3
+	github.com/spf13/pflag v1.0.3
+	github.com/syndtr/goleveldb v0.0.0-20180708030551-c4c61651e9e3
+	github.com/tyler-smith/go-bip39 v0.0.0-20181017060643-dbb3b84ba2ef
+	golang.org/x/crypto v0.0.0-20181025213731-e84da0312774
+	golang.org/x/net v0.0.0-20181023162649-9b4f9f5ad519
+	golang.org/x/sys v0.0.0-20180808154034-904bdc257025
+	golang.org/x/text v0.3.0
+	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
+	gopkg.in/yaml.v2 v2.2.1
+)

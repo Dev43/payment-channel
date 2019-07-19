@@ -26,4 +26,3 @@ To challenge this channel, only 1 signature from the opponent is needed, with a 
 Basic flow of the application:
 
 `init` -> `deploy` -> `open` -> `sign` -> `close` -> `challenge` (maybe) -> `timewarp` -> `finalize`
-
